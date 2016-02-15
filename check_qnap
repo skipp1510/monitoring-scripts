@@ -1,0 +1,606 @@
+#!/bin/bash
+############################# Created and written by Matthias Luettermann ############### 
+#
+#	copyright (c) 2008 Shahid Iqbal
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; 
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# contact the author directly for more information at: matthias@xcontrol.de
+##########################################################################################
+############################# Rewrite by Sebastian Geppert ############### 
+#
+#	copyright (c) 2008 Shahid Iqbal
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; 
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# official repository: https://github.com/skipp1510/monitoring-scripts
+# 
+##########################################################################################
+#Version 1.10
+
+
+if [ ! "$#" == "5" ]; then
+    	echo -e "\nWarning: Wrong command line arguments. \nUsage: ./check_qnap <hostname> <community> <part> <warning> <critical>\n \nParts are:  cpu, freeram, diskused, temp, hd1temp until hd12temp, hd1status until hd12status and volstatus (volstatus = Raid Info)\nExample: ./check_qnap 127.0.0.1 public diskusage 80 95\n" && exit "3"
+fi
+strHostname=$1
+strCommunity=$2
+strpart=$3
+strWarning=$4
+strCritical=$5
+
+# Check ob QNAP erreichbar ist
+TEST=$(snmpstatus -v 1 $Hostname -c "$strCommunity" -t 5 -r 0 2>&1) 
+# echo "Test: $TEST"; 
+if [ "$TEST" == "Timeout: No Response from $strHostname" ]; then 
+echo "CRITICAL: SNMP to $strHostname is not available"; 
+exit 2; 
+fi
+
+# DISKUSAGE ---------------------------------------------------------------------------------------------------------------------------------------
+if [ "$strpart" == "diskused" ]; then
+	disk=$(snmpget -v1 -c "$strCommunity" "$strHostname" 1.3.6.1.4.1.24681.1.2.17.1.4.1 | awk '{print $4}' | sed 's/.\(.*\)/\1/')
+	free=$(snmpget -v1 -c "$strCommunity" "$strHostname" 1.3.6.1.4.1.24681.1.2.17.1.5.1 | awk '{print $4}' | sed 's/.\(.*\)/\1/')
+	GBtest=$(snmpget -v1 -c "$strCommunity" "$strHostname" 1.3.6.1.4.1.24681.1.2.17.1.4.1 | awk '{print $5}' | sed 's/.*\(TB\).*/\1/')
+	GBtest2=$(snmpget -v1 -c "$strCommunity" "$strHostname" 1.3.6.1.4.1.24681.1.2.17.1.5.1 | awk '{print $5}' | sed 's/.*\(TB\).*/\1/')
+
+	if [ "$GBtest" == "TB" ]; then
+		disk=$(echo "scale=0; $disk*1000" | bc -l)
+	fi
+	
+	if [ "$GBtest2" == "TB" ]; then
+		free=$(echo "scale=0; $free*1000" | bc -l)
+	fi
+	
+	used=$(echo "scale=0; $disk-$free" | bc -l)
+	PERC=$(echo "scale=0; $used*100/$disk" | bc -l)
+	disk=$(echo "scale=2; $disk/1000" | bc -l)
+	free=$(echo "scale=2; $free/1000" | bc -l)
+	used=$(echo "scale=2; $used/1000" | bc -l)
+	
+	OUTPUT="total:"$disk"TB free:"$free"TB Used:"$used"TB = $PERC%|Used=$PERC%;$strWarning;$strCritical;0;100"
+	
+	if [ $PERC -ge $strCritical ]; then
+		echo "CRITICAL: "$OUTPUT
+		exit 2
+	
+	elif [ $PERC -ge $strWarning ]; then
+		echo "WARNING: "$OUTPUT
+	exit 1
+	else 
+		echo "OK: "$OUTPUT
+		exit 0
+	fi
+# CPU ----------------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "cpu" ]; then
+    	CPU=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.1.0 | awk '{print $4 $5}' | sed 's/.\(.*\)...../\1/')
+	OUTPUT="CPU load="$CPU"%|CPU load="$CPU"%;$strWarning;$strCritical;0;100" 
+
+   	if [ $CPU -ge $strCritical ]; then
+		echo "CRITICAL: "$OUTPUT
+		exit 2
+
+	elif [ $CPU -ge $strWarning ]; then
+		echo "WARNING: "$OUTPUT
+		exit 1
+
+	else 
+		echo "OK: "$OUTPUT
+		exit 0
+	fi
+
+# Free RAM---------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "freeram" ]; then
+	TOTALRAM=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.2.0 | awk '{print $4 $5}' | sed 's/.\(.*\)...../\1/')
+	FREERAM=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.3.0 | awk '{print $4 $5}' | sed 's/.\(.*\)...../\1/')
+	let "USEDRAM=($TOTALRAM-$FREERAM)"
+	let "RAMPERC=(($USEDRAM*100)/$TOTALRAM)"
+	OUTPUT="Memory usage: total:"$TOTALRAM"MB - used:"$USEDRAM"MB = free:"$FREERAM"MB = "$RAMPERC"%|Memory usage="$RAMPERC"%;$strWarning;$strCritical;0;100"
+
+	if [ $RAMPERC -ge $strCritical ]; then
+		echo "CRITICAL: "$OUTPUT
+		exit 2
+
+	elif [ $RAMPERC -ge $strWarning ]; then
+		echo "WARNING: "$OUTPUT
+		exit 1
+	
+	else echo "OK: "$OUTPUT
+		exit 0
+
+	fi
+
+# System Temperature---------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "temp" ]; then
+    	TEMP0=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.6.0 | awk '{print $4}' | cut -c2-3)
+	OUTPUT="System temperature="$TEMP0"C|NAS termperature="$TEMP0"C;$strWarning;$strCritical;0;60"
+
+    	if [ "$TEMP0" -ge "59" ]; then
+            	echo "Sytem temperatur to high!: "$OUTPUT
+            	exit 2
+    	else
+
+            	if [ $TEMP0 -ge "$strCritical" ]; then
+                    	echo "CRITICAL: "$OUTPUT
+                    	exit 2
+            	fi
+            	if [ $TEMP0 -ge "$strWarning" ]; then
+                    	echo "WARNING: "$OUTPUT
+                    	exit 1
+            	fi
+            	echo "OK: "$OUTPUT
+            	exit 0
+    	fi
+
+# HD1 Temperature---------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd1temp" ]; then
+    	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.1 | awk '{print $4}' | cut -c2-3)
+	OUTPUT="HDD1 temperature="$TEMPHD"C|HDD1 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
+
+    	if [ "$TEMPHD" -ge "59" ]; then
+            	echo "HDD1 temperatur to high!: "$OUTPUT
+            	exit 2
+    	else
+            	if [ $TEMPHD -ge "$strCritical" ]; then
+                    	echo "CRITICAL: "$OUTPUT
+                    	exit 2
+            	fi
+            	if [ $TEMPHD -ge "$strWarning" ]; then
+                    	echo "WARNING: "$OUTPUT
+                    	exit 1
+            	fi
+            	echo "OK: "$OUTPUT
+            	exit 0
+    	fi
+
+# HD2 Temperature---------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd2temp" ]; then
+    	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.2 | awk '{print $4}' | cut -c2-3)
+	OUTPUT="HDD2 temperature="$TEMPHD"C|HDD2 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
+
+    	if [ "$TEMPHD" -ge "59" ]; then
+            	echo "HDD2 temperatur to high!: "$OUTPUT
+            	exit 2
+    	else
+            	if [ $TEMPHD -ge "$strCritical" ]; then
+                    	echo "CRITICAL: "$OUTPUT
+                    	exit 2
+            	fi
+            	if [ $TEMPHD -ge "$strWarning" ]; then
+                    	echo "WARNING: "$OUTPUT
+                    	exit 1
+            	fi
+            	echo "OK: "$OUTPUT
+            	exit 0
+    	fi
+
+# HD3 Temperature---------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd3temp" ]; then
+    	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.3 | awk '{print $4}' | cut -c2-3)
+	OUTPUT="HDD3 temperature="$TEMPHD"C|HDD3 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
+
+    	if [ "$TEMPHD" -ge "59" ]; then
+            	echo "HDD3 temperatur to high!: "$OUTPUT
+            	exit 2
+    	else
+            	if [ $TEMPHD -ge "$strCritical" ]; then
+                    	echo "CRITICAL: "$OUTPUT
+                    	exit 2
+            	fi
+            	if [ $TEMPHD -ge "$strWarning" ]; then
+                    	echo "WARNING: "$OUTPUT
+                    	exit 1
+            	fi
+            	echo "OK: "$OUTPUT
+            	exit 0
+    	fi
+
+# HD4 Temperature---------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd4temp" ]; then
+    	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.4 | awk '{print $4}' | cut -c2-3)
+	OUTPUT="HDD4 temperature="$TEMPHD"C|HDD4 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
+
+    	if [ "$TEMPHD" -ge "59" ]; then
+            	echo "HDD4 temperatur to high!: "$OUTPUT
+            	exit 2
+    	else
+            	if [ $TEMPHD -ge "$strCritical" ]; then
+                    	echo "CRITICAL: "$OUTPUT
+                    	exit 2
+            	fi
+            	if [ $TEMPHD -ge "$strWarning" ]; then
+                    	echo "WARNING: "$OUTPUT
+                    	exit 1
+            	fi
+            	echo "OK: "$OUTPUT
+            	exit 0
+    	fi
+		
+# HD5 Temperature---------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd5temp" ]; then
+    	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.5 | awk '{print $4}' | cut -c2-3)
+	OUTPUT="HDD5 temperature="$TEMPHD"C|HDD5 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
+
+    	if [ "$TEMPHD" -ge "59" ]; then
+            	echo "HDD5 temperatur to high!: "$OUTPUT
+            	exit 2
+    	else
+            	if [ $TEMPHD -ge "$strCritical" ]; then
+                    	echo "CRITICAL: "$OUTPUT
+                    	exit 2
+            	fi
+            	if [ $TEMPHD -ge "$strWarning" ]; then
+                    	echo "WARNING: "$OUTPUT
+                    	exit 1
+            	fi
+            	echo "OK: "$OUTPUT
+            	exit 0
+    	fi
+
+# HD6 Temperature---------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd6temp" ]; then
+    	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.6 | awk '{print $4}' | cut -c2-3)
+	OUTPUT="HDD6 temperature="$TEMPHD"C|HDD6 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
+
+    	if [ "$TEMPHD" -ge "59" ]; then
+            	echo "HDD6 temperatur to high!: "$OUTPUT
+            	exit 2
+    	else
+            	if [ $TEMPHD -ge "$strCritical" ]; then
+                    	echo "CRITICAL: "$OUTPUT
+                    	exit 2
+            	fi
+            	if [ $TEMPHD -ge "$strWarning" ]; then
+                    	echo "WARNING: "$OUTPUT
+                    	exit 1
+            	fi
+            	echo "OK: "$OUTPUT
+            	exit 0
+    	fi
+
+# HD7 Temperature---------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd7temp" ]; then
+    	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.7 | awk '{print $4}' | cut -c2-3)
+	OUTPUT="HDD7 temperature="$TEMPHD"C|HDD7 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
+
+    	if [ "$TEMPHD" -ge "59" ]; then
+            	echo "HDD7 temperatur to high!: "$OUTPUT
+            	exit 2
+    	else
+            	if [ $TEMPHD -ge "$strCritical" ]; then
+                    	echo "CRITICAL: "$OUTPUT
+                    	exit 2
+            	fi
+            	if [ $TEMPHD -ge "$strWarning" ]; then
+                    	echo "WARNING: "$OUTPUT
+                    	exit 1
+            	fi
+            	echo "OK: "$OUTPUT
+            	exit 0
+    	fi
+
+# HD8 Temperature---------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd8temp" ]; then
+    	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.8 | awk '{print $4}' | cut -c2-3)
+	OUTPUT="HDD8 temperature="$TEMPHD"C|HDD8 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
+
+    	if [ "$TEMPHD" -ge "59" ]; then
+            	echo "HDD8 temperatur to high!: "$OUTPUT
+            	exit 2
+    	else
+            	if [ $TEMPHD -ge "$strCritical" ]; then
+                    	echo "CRITICAL: "$OUTPUT
+                    	exit 2
+            	fi
+            	if [ $TEMPHD -ge "$strWarning" ]; then
+                    	echo "WARNING: "$OUTPUT
+                    	exit 1
+            	fi
+            	echo "OK: "$OUTPUT
+            	exit 0
+    	fi
+		
+# HD9 Temperature---------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd9temp" ]; then
+    	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.9 | awk '{print $4}' | cut -c2-3)
+	OUTPUT="HDD9 temperature="$TEMPHD"C|HDD9 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
+
+    	if [ "$TEMPHD" -ge "59" ]; then
+            	echo "HDD9 temperatur to high!: "$OUTPUT
+            	exit 2
+    	else
+            	if [ $TEMPHD -ge "$strCritical" ]; then
+                    	echo "CRITICAL: "$OUTPUT
+                    	exit 2
+            	fi
+            	if [ $TEMPHD -ge "$strWarning" ]; then
+                    	echo "WARNING: "$OUTPUT
+                    	exit 1
+            	fi
+            	echo "OK: "$OUTPUT
+            	exit 0
+    	fi
+		
+# HD10 Temperature---------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd10temp" ]; then
+    	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.10 | awk '{print $4}' | cut -c2-3)
+	OUTPUT="HDD10 temperature="$TEMPHD"C|HDD108 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
+
+    	if [ "$TEMPHD" -ge "59" ]; then
+            	echo "HDD10 temperatur to high!: "$OUTPUT
+            	exit 2
+    	else
+            	if [ $TEMPHD -ge "$strCritical" ]; then
+                    	echo "CRITICAL: "$OUTPUT
+                    	exit 2
+            	fi
+            	if [ $TEMPHD -ge "$strWarning" ]; then
+                    	echo "WARNING: "$OUTPUT
+                    	exit 1
+            	fi
+            	echo "OK: "$OUTPUT
+            	exit 0
+    	fi
+		
+# HD11 Temperature---------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd11temp" ]; then
+    	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.11 | awk '{print $4}' | cut -c2-3)
+	OUTPUT="HDD11 temperature="$TEMPHD"C|HDD11 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
+
+    	if [ "$TEMPHD" -ge "59" ]; then
+            	echo "HDD11 temperatur to high!: "$OUTPUT
+            	exit 2
+    	else
+            	if [ $TEMPHD -ge "$strCritical" ]; then
+                    	echo "CRITICAL: "$OUTPUT
+                    	exit 2
+            	fi
+            	if [ $TEMPHD -ge "$strWarning" ]; then
+                    	echo "WARNING: "$OUTPUT
+                    	exit 1
+            	fi
+            	echo "OK: "$OUTPUT
+            	exit 0
+    	fi
+		
+# HD12 Temperature---------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd12temp" ]; then
+    	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.12 | awk '{print $4}' | cut -c2-3)
+	OUTPUT="HDD12 temperature="$TEMPHD"C|HDD12 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
+
+    	if [ "$TEMPHD" -ge "59" ]; then
+            	echo "HDD12 temperatur to high!: "$OUTPUT
+            	exit 2
+    	else
+            	if [ $TEMPHD -ge "$strCritical" ]; then
+                    	echo "CRITICAL: "$OUTPUT
+                    	exit 2
+            	fi
+            	if [ $TEMPHD -ge "$strWarning" ]; then
+                    	echo "WARNING: "$OUTPUT
+                    	exit 1
+            	fi
+            	echo "OK: "$OUTPUT
+            	exit 0
+    	fi
+		
+# Volume Status----------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "volstatus" ]; then
+    	Vol_Status=$(snmpget -v1 -c "$strCommunity" "$strHostname" 1.3.6.1.4.1.24681.1.2.17.1.6.1 | awk '{print $4}' | sed 's/^"\(.*\).$/\1/')
+
+    	if [ "$Vol_Status" == "Ready" ]; then
+            	echo "OK: "$Vol_Status
+            	exit 0
+
+    	elif [ "$Vol_Status" == "Rebuilding..." ]; then
+            	echo "WARNING: "$Vol_Status
+            	exit 1
+
+    	else
+            	echo "CRITICAL: "$Vol_Status
+            	exit 2
+    	fi
+
+# HD1 Status----------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd1status" ]; then
+    	HD1=$(snmpget -v1 -c "$strCommunity" "$strHostname" 1.3.6.1.4.1.24681.1.2.11.1.7.1 | awk '{print $4}' | sed 's/^"\(.*\).$/\1/')
+
+    	if [ "$HD1" == "GOOD" ]; then
+            	echo "OK: "$HD1
+            	exit 0
+		elif [ "$HD1" == "Normal" ]; then
+            	echo "WARNING: "$HD1
+            	exit 1
+    	else
+            	echo "CRITICAL: "$HD1
+            	exit 2
+    	fi
+		
+# HD2 Status----------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd2status" ]; then
+    	HD2=$(snmpget -v1 -c "$strCommunity" "$strHostname" 1.3.6.1.4.1.24681.1.2.11.1.7.2 | awk '{print $4}' | sed 's/^"\(.*\).$/\1/')
+
+    	if [ "$HD2" == "GOOD" ]; then
+            	echo "OK: "$HD2
+            	exit 0
+		elif [ "$HD2" == "Normal" ]; then
+            	echo "WARNING: "$HD2
+            	exit 1
+    	else
+            	echo "CRITICAL: "$HD2
+            	exit 2
+    	fi
+		
+# HD3 Status----------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd3status" ]; then
+    	HD3=$(snmpget -v1 -c "$strCommunity" "$strHostname" 1.3.6.1.4.1.24681.1.3.11.1.7.3 | awk '{print $4}' | sed 's/^"\(.*\).$/\1/')
+		
+    	if [ "$HD3" == "GOOD" ]; then
+            	echo "OK: "$HD3
+            	exit 0
+		elif [ "$HD3" == "Normal" ]; then
+            	echo "WARNING: "$HD3
+            	exit 1
+    	else
+            	echo "CRITICAL: "$HD3
+            	exit 2
+    	fi
+		
+# HD4 Status----------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd4status" ]; then
+    	HD4=$(snmpget -v1 -c "$strCommunity" "$strHostname" 1.3.6.1.4.1.24681.1.3.11.1.7.4 | awk '{print $4}' | sed 's/^"\(.*\).$/\1/')
+	
+    	if [ "$HD4" == "GOOD" ]; then
+            	echo "OK: "$HD4
+            	exit 0
+		elif [ "$HD4" == "Normal" ]; then
+            	echo "WARNING: "$HD4
+            	exit 1
+    	else
+            	echo "CRITICAL: "$HD4
+            	exit 2
+    	fi
+		
+# HD5 Status----------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd5status" ]; then
+    	HD5=$(snmpget -v1 -c "$strCommunity" "$strHostname" 1.3.6.1.4.1.24681.1.2.11.1.7.5 | awk '{print $4}' | sed 's/^"\(.*\).$/\1/')
+
+    	if [ "$HD5" == "GOOD" ]; then
+            	echo "OK: "$HD5
+            	exit 0
+		elif [ "$HD5" == "Normal" ]; then
+            	echo "WARNING: "$HD5
+            	exit 1
+    	else
+            	echo "CRITICAL: "$HD5
+            	exit 2
+    	fi
+		
+# HD6 Status----------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd6status" ]; then
+    	HD6=$(snmpget -v1 -c "$strCommunity" "$strHostname" 1.3.6.1.4.1.24681.1.2.11.1.7.6 | awk '{print $4}' | sed 's/^"\(.*\).$/\1/')
+
+    	if [ "$HD6" == "GOOD" ]; then
+            	echo "OK: "$HD6
+            	exit 0
+		elif [ "$HD6" == "Normal" ]; then
+            	echo "WARNING: "$HD6
+            	exit 1
+    	else
+            	echo "CRITICAL: "$HD6
+            	exit 2
+    	fi
+		
+# HD7 Status----------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd7status" ]; then
+    	HD7=$(snmpget -v1 -c "$strCommunity" "$strHostname" 1.3.6.1.4.1.24681.1.3.11.1.7.7 | awk '{print $4}' | sed 's/^"\(.*\).$/\1/')
+		
+    	if [ "$HD7" == "GOOD" ]; then
+            	echo "OK: "$HD7
+            	exit 0
+		elif [ "$HD7" == "Normal" ]; then
+            	echo "WARNING: "$HD7
+            	exit 1
+    	else
+            	echo "CRITICAL: "$HD7
+            	exit 2
+    	fi
+		
+# HD8 Status----------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd8status" ]; then
+    	HD8=$(snmpget -v1 -c "$strCommunity" "$strHostname" 1.3.6.1.4.1.24681.1.3.11.1.7.8 | awk '{print $4}' | sed 's/^"\(.*\).$/\1/')
+	
+    	if [ "$HD8" == "GOOD" ]; then
+            	echo "OK: "$HD8
+            	exit 0
+		elif [ "$HD8" == "Normal" ]; then
+            	echo "WARNING: "$HD8
+            	exit 1
+    	else
+            	echo "CRITICAL: "$HD8
+            	exit 2
+    	fi
+		
+# HD9 Status----------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd9status" ]; then
+    	HD9=$(snmpget -v1 -c "$strCommunity" "$strHostname" 1.3.6.1.4.1.24681.1.3.11.1.7.9 | awk '{print $4}' | sed 's/^"\(.*\).$/\1/')
+	
+    	if [ "$HD9" == "GOOD" ]; then
+            	echo "OK: "$HD9
+            	exit 0
+		elif [ "$HD9" == "Normal" ]; then
+            	echo "WARNING: "$HD9
+            	exit 1
+    	else
+            	echo "CRITICAL: "$HD9
+            	exit 2
+    	fi
+		
+# HD10 Status----------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd10status" ]; then
+    	HD10=$(snmpget -v1 -c "$strCommunity" "$strHostname" 1.3.6.1.4.1.24681.1.3.11.1.7.10 | awk '{print $4}' | sed 's/^"\(.*\).$/\1/')
+	
+    	if [ "$HD10" == "GOOD" ]; then
+            	echo "OK: "$HD10
+            	exit 0
+		elif [ "$HD10" == "Normal" ]; then
+            	echo "WARNING: "$HD10
+            	exit 1
+    	else
+            	echo "CRITICAL: "$HD10
+            	exit 2
+    	fi		
+		
+# HD11 Status----------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd11status" ]; then
+    	HD11=$(snmpget -v1 -c "$strCommunity" "$strHostname" 1.3.6.1.4.1.24681.1.3.11.1.7.11 | awk '{print $4}' | sed 's/^"\(.*\).$/\1/')
+	
+    	if [ "$HD11" == "GOOD" ]; then
+            	echo "OK: "$HD11
+            	exit 0
+		elif [ "$HD11" == "Normal" ]; then
+            	echo "WARNING: "$HD11
+            	exit 1
+    	else
+            	echo "CRITICAL: "$HD11
+            	exit 2
+    	fi
+		
+# HD12 Status----------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "hd12status" ]; then
+    	HD12=$(snmpget -v1 -c "$strCommunity" "$strHostname" 1.3.6.1.4.1.24681.1.3.11.1.7.12 | awk '{print $4}' | sed 's/^"\(.*\).$/\1/')
+	
+    	if [ "$HD12" == "GOOD" ]; then
+            	echo "OK: "$HD12
+            	exit 0
+		elif [ "$HD12" == "Normal" ]; then
+            	echo "WARNING: "$HD12
+            	exit 1
+    	else
+            	echo "CRITICAL: "$HD12
+            	exit 2
+    	fi	
+		
+# System Uptime----------------------------------------------------------------------------------------------------------------------------------------
+elif [ "$strpart" == "systemuptime" ]; then
+    	uptime=$(snmpget -v1 -c "$strCommunity" "$strHostname" .1.3.6.1.2.1.1.3.0 | awk '{print $5, $6, $7, $8}')
+		
+            	echo $uptime
+            	exit 0
+    	
+#----------------------------------------------------------------------------------------------------------------------------------------------------
+else
+    	echo -e "\nUnknown Part!" && exit "3"
+fi
+exit 0
