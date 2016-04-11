@@ -41,7 +41,7 @@ strWarning=$4
 strCritical=$5
 
 # Check ob QNAP erreichbar ist
-TEST=$(snmpstatus -v 1 $Hostname -c "$strCommunity" -t 5 -r 0 2>&1) 
+TEST=$(snmpstatus -v 1 $strHostname -c "$strCommunity" -t 5 -r 0 2>&1) 
 # echo "Test: $TEST"; 
 if [ "$TEST" == "Timeout: No Response from $strHostname" ]; then 
 echo "CRITICAL: SNMP to $strHostname is not available"; 
@@ -147,8 +147,11 @@ elif [ "$strpart" == "temp" ]; then
 elif [ "$strpart" == "hd1temp" ]; then
     	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.1 | awk '{print $4}' | cut -c2-3)
 	OUTPUT="HDD1 temperature="$TEMPHD"C|HDD1 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
-
-    	if [ "$TEMPHD" -ge "59" ]; then
+	
+	if [ "$TEMPHD" == "--" ]; then
+		echo "HDD1 not found"
+		exit 2
+    	elif [ "$TEMPHD" -ge "59" ]; then
             	echo "HDD1 temperatur to high!: "$OUTPUT
             	exit 2
     	else
@@ -169,7 +172,10 @@ elif [ "$strpart" == "hd2temp" ]; then
     	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.2 | awk '{print $4}' | cut -c2-3)
 	OUTPUT="HDD2 temperature="$TEMPHD"C|HDD2 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
 
-    	if [ "$TEMPHD" -ge "59" ]; then
+	if [ "$TEMPHD" == "--" ]; then
+		echo "HDD2 not found"
+		exit 2
+    	elif [ "$TEMPHD" -ge "59" ]; then
             	echo "HDD2 temperatur to high!: "$OUTPUT
             	exit 2
     	else
@@ -190,7 +196,10 @@ elif [ "$strpart" == "hd3temp" ]; then
     	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.3 | awk '{print $4}' | cut -c2-3)
 	OUTPUT="HDD3 temperature="$TEMPHD"C|HDD3 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
 
-    	if [ "$TEMPHD" -ge "59" ]; then
+	if [ "$TEMPHD" == "--" ]; then
+		echo "HDD3 not found"
+		exit 2
+    	elif [ "$TEMPHD" -ge "59" ]; then
             	echo "HDD3 temperatur to high!: "$OUTPUT
             	exit 2
     	else
@@ -211,7 +220,10 @@ elif [ "$strpart" == "hd4temp" ]; then
     	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.4 | awk '{print $4}' | cut -c2-3)
 	OUTPUT="HDD4 temperature="$TEMPHD"C|HDD4 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
 
-    	if [ "$TEMPHD" -ge "59" ]; then
+	if [ "$TEMPHD" == "--" ]; then
+		echo "HDD4 not found"
+		exit 2
+    	elif [ "$TEMPHD" -ge "59" ]; then
             	echo "HDD4 temperatur to high!: "$OUTPUT
             	exit 2
     	else
@@ -232,7 +244,10 @@ elif [ "$strpart" == "hd5temp" ]; then
     	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.5 | awk '{print $4}' | cut -c2-3)
 	OUTPUT="HDD5 temperature="$TEMPHD"C|HDD5 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
 
-    	if [ "$TEMPHD" -ge "59" ]; then
+	if [ "$TEMPHD" == "--" ]; then
+		echo "HDD5 not found"
+		exit 2
+    	elif [ "$TEMPHD" -ge "59" ]; then
             	echo "HDD5 temperatur to high!: "$OUTPUT
             	exit 2
     	else
@@ -253,7 +268,10 @@ elif [ "$strpart" == "hd6temp" ]; then
     	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.6 | awk '{print $4}' | cut -c2-3)
 	OUTPUT="HDD6 temperature="$TEMPHD"C|HDD6 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
 
-    	if [ "$TEMPHD" -ge "59" ]; then
+	if [ "$TEMPHD" == "--" ]; then
+		echo "HDD6 not found"
+		exit 2
+    	elif [ "$TEMPHD" -ge "59" ]; then
             	echo "HDD6 temperatur to high!: "$OUTPUT
             	exit 2
     	else
@@ -274,7 +292,10 @@ elif [ "$strpart" == "hd7temp" ]; then
     	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.7 | awk '{print $4}' | cut -c2-3)
 	OUTPUT="HDD7 temperature="$TEMPHD"C|HDD7 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
 
-    	if [ "$TEMPHD" -ge "59" ]; then
+	if [ "$TEMPHD" == "--" ]; then
+		echo "HDD7 not found"
+		exit 2
+    	elif [ "$TEMPHD" -ge "59" ]; then
             	echo "HDD7 temperatur to high!: "$OUTPUT
             	exit 2
     	else
@@ -295,7 +316,10 @@ elif [ "$strpart" == "hd8temp" ]; then
     	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.8 | awk '{print $4}' | cut -c2-3)
 	OUTPUT="HDD8 temperature="$TEMPHD"C|HDD8 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
 
-    	if [ "$TEMPHD" -ge "59" ]; then
+	if [ "$TEMPHD" == "--" ]; then
+		echo "HDD8 not found"
+		exit 2
+    	elif [ "$TEMPHD" -ge "59" ]; then
             	echo "HDD8 temperatur to high!: "$OUTPUT
             	exit 2
     	else
@@ -316,7 +340,10 @@ elif [ "$strpart" == "hd9temp" ]; then
     	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.9 | awk '{print $4}' | cut -c2-3)
 	OUTPUT="HDD9 temperature="$TEMPHD"C|HDD9 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
 
-    	if [ "$TEMPHD" -ge "59" ]; then
+	if [ "$TEMPHD" == "--" ]; then
+		echo "HDD9 not found"
+		exit 2
+    	elif [ "$TEMPHD" -ge "59" ]; then
             	echo "HDD9 temperatur to high!: "$OUTPUT
             	exit 2
     	else
@@ -337,7 +364,10 @@ elif [ "$strpart" == "hd10temp" ]; then
     	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.10 | awk '{print $4}' | cut -c2-3)
 	OUTPUT="HDD10 temperature="$TEMPHD"C|HDD108 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
 
-    	if [ "$TEMPHD" -ge "59" ]; then
+	if [ "$TEMPHD" == "--" ]; then
+		echo "HDD10 not found"
+		exit 2
+    	elif [ "$TEMPHD" -ge "59" ]; then
             	echo "HDD10 temperatur to high!: "$OUTPUT
             	exit 2
     	else
@@ -358,7 +388,10 @@ elif [ "$strpart" == "hd11temp" ]; then
     	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.11 | awk '{print $4}' | cut -c2-3)
 	OUTPUT="HDD11 temperature="$TEMPHD"C|HDD11 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
 
-    	if [ "$TEMPHD" -ge "59" ]; then
+	if [ "$TEMPHD" == "--" ]; then
+		echo "HDD11 not found"
+		exit 2
+    	elif [ "$TEMPHD" -ge "59" ]; then
             	echo "HDD11 temperatur to high!: "$OUTPUT
             	exit 2
     	else
@@ -379,7 +412,10 @@ elif [ "$strpart" == "hd12temp" ]; then
     	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.12 | awk '{print $4}' | cut -c2-3)
 	OUTPUT="HDD12 temperature="$TEMPHD"C|HDD12 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
 
-    	if [ "$TEMPHD" -ge "59" ]; then
+	if [ "$TEMPHD" == "--" ]; then
+		echo "HDD12 not found"
+		exit 2
+    	elif [ "$TEMPHD" -ge "59" ]; then
             	echo "HDD12 temperatur to high!: "$OUTPUT
             	exit 2
     	else
