@@ -41,7 +41,7 @@ strWarning=$4
 strCritical=$5
 
 # Check ob QNAP erreichbar ist
-TEST=$(snmpstatus -v 1 $Hostname -c "$strCommunity" -t 5 -r 0 2>&1) 
+TEST=$(snmpstatus -v 1 $strHostname -c "$strCommunity" -t 5 -r 0 2>&1) 
 # echo "Test: $TEST"; 
 if [ "$TEST" == "Timeout: No Response from $strHostname" ]; then 
 echo "CRITICAL: SNMP to $strHostname is not available"; 
