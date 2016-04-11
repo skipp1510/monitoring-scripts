@@ -147,8 +147,11 @@ elif [ "$strpart" == "temp" ]; then
 elif [ "$strpart" == "hd1temp" ]; then
     	TEMPHD=$(snmpget -v1 -c "$strCommunity" $strHostname 1.3.6.1.4.1.24681.1.2.11.1.3.1 | awk '{print $4}' | cut -c2-3)
 	OUTPUT="HDD1 temperature="$TEMPHD"C|HDD1 termperature="$TEMPHD"C;$strWarning;$strCritical;0;60"
-
-    	if [ "$TEMPHD" -ge "59" ]; then
+	
+	if [ "$TEMPHD" == "--" ]; then
+		echo "HDD1 not found"
+		exit 2
+    	elif [ "$TEMPHD" -ge "59" ]; then
             	echo "HDD1 temperatur to high!: "$OUTPUT
             	exit 2
     	else
